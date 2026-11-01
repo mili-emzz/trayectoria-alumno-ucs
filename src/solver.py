@@ -36,29 +36,43 @@ def _criticidad(mid: str) -> int:
 
 def generar_acciones(elegibles: list) -> list:
     """
-    Genera hasta MAX_COMBOS_POR_NODO acciones (subconjuntos de elegibles).
+    Genera acciones (subconjuntos de materias elegibles a inscribir).
 
-    Estrategia para controlar la explosión combinatoria:
-      1. Ordena los elegibles por criticidad descendente (más críticos primero).
-      2. Genera combinaciones de tamaño 1..MAX_MATERIAS_POR_PERIODO en ese orden.
-      3. Detiene la generación en cuanto se alcanza MAX_COMBOS_POR_NODO.
-
-    Esto prioriza explorar acciones que contienen las materias más "valiosas"
-    para la ruta crítica hacia la graduación.
+    Estrategia de poda y optimización:
+      1. Ordena los elegibles dando prioridad a materias críticas (que desbloquean
+         más materias posteriores), luego menor cuatrimestre original.
+      2. Si el número de elegibles cabe dentro de la carga máxima (<= 9),
+         se explora la carga completa y subconjuntos cercanos de alta carga
+         para avanzar eficientemente sin retrasar la graduación ni crear
+         caminos redundantes dominados.
     """
-    # Ordenar por criticidad (desc); desempate por nombre para determinismo
-    ordenados = sorted(elegibles, key=lambda m: (-_criticidad(m), m))
+    if not elegibles:
+        return []
 
-    # Limitar el pool a los 12 más críticos para controlar el espacio
-    pool = ordenados[: min(len(ordenados), 12)]
-    max_k = min(len(pool), MAX_MATERIAS_POR_PERIODO)
+    # Ordenar por criticidad descendente, luego nivel de cuatrimestre ascendente, y mid
+    ordenados = sorted(
+        elegibles,
+        key=lambda m: (-_criticidad(m), MATERIAS[m]["cuatrimestre"], m)
+    )
 
+    if len(ordenados) <= MAX_MATERIAS_POR_PERIODO:
+        acciones = [frozenset(ordenados)]
+        if len(ordenados) > 1:
+            for combo in combinations(ordenados, len(ordenados) - 1):
+                acciones.append(frozenset(combo))
+                if len(acciones) >= 25:
+                    break
+        return acciones
+
+    # Si hay más de 9 elegibles:
+    pool = ordenados[: min(len(ordenados), 11)]
     acciones = []
-    for k in range(max_k, 0, -1):          # De mayor a menor carga
+    for k in [MAX_MATERIAS_POR_PERIODO, MAX_MATERIAS_POR_PERIODO - 1]:
         for combo in combinations(pool, k):
             acciones.append(frozenset(combo))
-            if len(acciones) >= MAX_COMBOS_POR_NODO:
+            if len(acciones) >= 35:
                 return acciones
+
     return acciones
 
 

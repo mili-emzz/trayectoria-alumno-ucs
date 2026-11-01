@@ -76,8 +76,8 @@ MATERIAS = {
 # Conjunto completo de IDs
 TODAS_LAS_MATERIAS: set = set(MATERIAS.keys())
 
-# Estado meta: aprobar Estancia II
-META: set = {"EST2"}
+# Estado meta: haber aprobado la totalidad de las materias del plan de estudios (100%)
+META: set = TODAS_LAS_MATERIAS
 
 
 def materias_elegibles(aprobadas: frozenset, cuatrimestre_actual: int) -> list:
