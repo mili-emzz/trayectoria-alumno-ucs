@@ -83,37 +83,163 @@ Al tratarse de una Búsqueda en Espacio de Estados No Informada (Uniform-Cost Se
 # Implementación
 
 ```python
-# label: LA.C1.A4.CODE::UCS_Search caption: "Motor de Búsqueda UCS para Trayectorias"
-def uniform_cost_search(estado_inicial, plan_estudios):
+# label: LA.C1.A4.CODE::generar_acciones caption: "Función para generar acciones (transiciones)"
+def generar_acciones(elegibles: list) -> list:
     """
-    Ejecuta el algoritmo de Búsqueda de Costo Uniforme (UCS).
-    Recibe: 
-      - estado_inicial: Tupla con (materias_aprobadas, cuatrimestre_actual).
-      - plan_estudios: Grafo con la seriación curricular.
-    Hace: 
-      Expande nodos basándose en el costo acumulado g(n) = 1.0 + (materias * 0.01).
-      Verifica transiciones válidas según prerrequisitos y límites de carga (máx 9).
-    Devuelve: 
-      El plan óptimo de cuatrimestres y estadísticas (nodos expandidos/generados).
-    """
-    frontera = [(0, estado_inicial, [])] # Cola de prioridad (costo, estado, ruta)
-    visitados = set()
+    Genera acciones (subconjuntos de materias elegibles a inscribir).
     
-    while frontera:
-        costo_actual, estado_actual, ruta = heapq.heappop(frontera)
-        
-        if is_goal(estado_actual, plan_estudios):
-            return ruta, costo_actual
-            
-        if estado_actual in visitados:
+    Parámetros:
+      elegibles: lista con los IDs de las materias que el alumno ya puede cursar.
+      
+    Hace:
+      Aplica una estrategia de poda ordenando las materias por criticidad (las
+      que desbloquean más materias futuras) y luego por nivel de cuatrimestre.
+      Si las elegibles caben en la carga máxima (<= 9), crea combinaciones de 
+      la carga completa y subconjuntos cercanos. Si superan el límite, toma las
+      más críticas y genera combinaciones limitadas a la carga máxima.
+      
+    Devuelve:
+      Una lista de 'frozenset', donde cada conjunto representa una combinación
+      válida de materias a inscribir en el periodo.
+    """
+    if not elegibles:
+        return []
+
+    # Ordenar por criticidad descendente, luego nivel de cuatrimestre ascendente, y mid
+    ordenados = sorted(
+        elegibles,
+        key=lambda m: (-_criticidad(m), MATERIAS[m]["cuatrimestre"], m)
+    )
+
+    if len(ordenados) <= MAX_MATERIAS_POR_PERIODO:
+        acciones = [frozenset(ordenados)]
+        if len(ordenados) > 1:
+            for combo in combinations(ordenados, len(ordenados) - 1):
+                acciones.append(frozenset(combo))
+                if len(acciones) >= 25:
+                    break
+        return acciones
+
+    # Si hay más de 9 elegibles:
+    pool = ordenados[: min(len(ordenados), 11)]
+    acciones = []
+    for k in [MAX_MATERIAS_POR_PERIODO, MAX_MATERIAS_POR_PERIODO - 1]:
+        for combo in combinations(pool, k):
+            acciones.append(frozenset(combo))
+            if len(acciones) >= 35:
+                return acciones
+
+    return acciones
+
+  # label: LA.C1.A4.CODE::costo_paso caption: "Función de evaluación de costo g(n)"
+def costo_paso(accion: frozenset) -> float:
+    """
+    Calcula el costo de ejecutar una transición (inscribir un bloque de materias).
+    
+    Parámetros:
+      accion: un frozenset que contiene los IDs de las materias a inscribir.
+      
+    Hace:
+      Suma un costo base de 1.0 por el transcurso de un periodo lectivo, y añade
+      una penalización proporcional muy pequeña (EPSILON = 0.01) por cada 
+      asignatura incluida en el bloque.
+      
+    Devuelve:
+      Un valor flotante que representa el costo del paso. (Ej. para 4 materias
+      el costo es 1.04).
+    """
+    return 1.0 + len(accion) * EPSILON
+
+  # label: LA.C1.A4.CODE::ucs caption: "Algoritmo principal de Búsqueda de Costo Uniforme (UCS)"
+def ucs(aprobadas_iniciales: set, cuatrimestre_inicial: int, callback=None):
+    """
+    Búsqueda en Espacio de Estados mediante Uniform-Cost Search (UCS).
+    
+    Parámetros:
+      aprobadas_iniciales: set con los IDs de las asignaturas ya aprobadas.
+      cuatrimestre_inicial: entero indicando el periodo actual del alumno.
+      callback: Función opcional para reportar el progreso de expansión en la UI.
+      
+    Hace:
+      Implementa el algoritmo UCS utilizando una cola de prioridad (min-heap)
+      ordenada por el costo acumulado `g`. En cada ciclo expande el nodo de
+      menor costo, comprueba si es el estado meta, y de no serlo, calcula sus
+      materias elegibles. Posteriormente genera los sucesores aplicando la
+      función `costo_paso` para acumular el costo. Registra un diccionario
+      `visitados` para evitar expandir rutas redundantes y podar ramas ineficientes.
+      
+    Devuelve:
+      Un diccionario con la trayectoria de recuperación óptima (plan de estudios, 
+      costo total, cuatrimestres necesarios y métricas de desempeño). Si no
+      existe solución, retorna None.
+    """
+    t_inicio = time.time()
+    aprobadas_ini = frozenset(aprobadas_iniciales)
+    estado_inicial = (aprobadas_ini, cuatrimestre_inicial)
+
+    # Cola de prioridad: (costo_acumulado, contador_desempate, estado, plan)
+    cola: list = []
+    counter = 0
+    heapq.heappush(cola, (0.0, counter, estado_inicial, []))
+
+    visitados: dict = {}
+    nodos_expandidos = 0
+    nodos_generados = 1
+
+    while cola:
+        g, _, (aprobadas, cuatri), plan = heapq.heappop(cola)
+
+        estado_key = (aprobadas, cuatri)
+        if estado_key in visitados and visitados[estado_key] <= g:
             continue
+        visitados[estado_key] = g
+
+        nodos_expandidos += 1
+
+        if es_meta(aprobadas):
+            t_fin = time.time()
+            return {
+                "plan":             plan,
+                "costo_total":      round(g, 4),
+                "cuatrimestres":    len(plan),
+                "nodos_expandidos": nodos_expandidos,
+                "nodos_generados":  nodos_generados,
+                "tiempo_seg":       round(t_fin - t_inicio, 4),
+            }
+
+        elegibles = materias_elegibles(aprobadas, cuatri)
+
+        if not elegibles:
+            nuevo_estado = (aprobadas, cuatri + 1)
+            nuevo_g = g + 1.0
+            if nuevo_estado not in visitados or visitados[nuevo_estado] > nuevo_g:
+                counter += 1
+                nodos_generados += 1
+                heapq.heappush(cola, (nuevo_g, counter, nuevo_estado, plan))
+            continue
+
+        acciones = generar_acciones(elegibles)
+
+        for accion in acciones:
+            nuevas_aprobadas = aprobadas | accion
+            nuevo_cuatri = cuatri + 1
+            nuevo_g = g + costo_paso(accion)
+
+            nuevo_estado = (nuevas_aprobadas, nuevo_cuatri)
             
-        visitados.add(estado_actual)
-        
-        # Se generan transiciones combinando materias elegibles (1 a 9)
-        for nueva_accion in generar_transiciones(estado_actual, plan_estudios):
-            nuevo_estado = aplicar_transicion(estado_actual, nueva_accion)
-            costo_paso = 1.0 + (len(nueva_accion) * 0.01)
-            heapq.heappush(frontera, (costo_actual + costo_paso, nuevo_estado, ruta + [nueva_accion]))
-            
+            if nuevo_estado in visitados and visitados[nuevo_estado] <= nuevo_g:
+                continue
+
+            detalle = {
+                "cuatrimestre": cuatri,
+                "materias":     sorted(list(accion)),
+                "nombres":      [MATERIAS[m]["nombre"] for m in sorted(accion)],
+                "costo_paso":   round(costo_paso(accion), 4),
+            }
+            nueva_plan = plan + [detalle]
+
+            counter += 1
+            nodos_generados += 1
+            heapq.heappush(cola, (nuevo_g, counter, nuevo_estado, nueva_plan))
+
     return None
