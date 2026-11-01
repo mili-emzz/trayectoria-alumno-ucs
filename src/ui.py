@@ -10,6 +10,40 @@ import threading
 from src.curriculum import MATERIAS, TODAS_LAS_MATERIAS
 from src.solver import ucs
 
+
+# ── Clase utilitaria para Tooltips ──────────────────────────────────────────
+
+class Tooltip:
+    """Muestra una ventana emergente con texto de ayuda al pasar el mouse."""
+
+    def __init__(self, widget: tk.Widget, text: str):
+        self.widget = widget
+        self.text = text
+        self._tip_window: tk.Toplevel | None = None
+        widget.bind("<Enter>", self._show)
+        widget.bind("<Leave>", self._hide)
+
+    def _show(self, _event=None):
+        if self._tip_window:
+            return
+        x = self.widget.winfo_rootx() + self.widget.winfo_width() // 2
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
+        self._tip_window = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True)   # Sin bordes de ventana
+        tw.wm_geometry(f"+{x}+{y}")
+        tk.Label(
+            tw, text=self.text,
+            bg="#45475a", fg="#cdd6f4",
+            font=("Segoe UI", 9),
+            relief="flat", padx=8, pady=5,
+            wraplength=280, justify="left",
+        ).pack()
+
+    def _hide(self, _event=None):
+        if self._tip_window:
+            self._tip_window.destroy()
+            self._tip_window = None
+
 # ── Paleta de colores (Catppuccin Mocha) ────────────────────────────────────
 BG       = "#1e1e2e"
 FG       = "#cdd6f4"
@@ -86,13 +120,19 @@ class AcademicPlannerApp:
         # Selector de cuatrimestre
         cuatri_frame = tk.Frame(left, bg=PANEL)
         cuatri_frame.pack(fill="x", padx=10, pady=5)
-        tk.Label(
+        lbl_cuatri = tk.Label(
             cuatri_frame,
             text="Cuatrimestre actual:",
             bg=PANEL, fg=FG,
             font=("Segoe UI", 10),
-        ).pack(side="left")
-        tk.Spinbox(
+        )
+        lbl_cuatri.pack(side="left")
+        Tooltip(lbl_cuatri,
+                "El cuatrimestre en el que estás actualmente.\n"
+                "Usa las flechas ▲▼ o escribe el número directamente.\n\n"
+                "Ejemplo: si acabas de terminar el 3er cuatrimestre\n"
+                "y vas a empezar el 4to, pon 4.")
+        spn = tk.Spinbox(
             cuatri_frame,
             from_=1, to=10,
             textvariable=self.var_cuatri,
@@ -101,13 +141,18 @@ class AcademicPlannerApp:
             bg=SUBPANEL, fg=FG,
             buttonbackground=SUBPANEL,
             relief="flat",
-        ).pack(side="left", padx=8)
+        )
+        spn.pack(side="left", padx=8)
+        Tooltip(spn,
+                "El cuatrimestre en el que estás actualmente (1–10).\n"
+                "Úsalo con 👤 Regular para marcar automáticamente\n"
+                "las materias de cuatrimestres anteriores.")
 
         # Botones de acción
         btn_frame = tk.Frame(left, bg=PANEL)
         btn_frame.pack(fill="x", padx=10, pady=5)
 
-        tk.Button(
+        btn_resolver = tk.Button(
             btn_frame,
             text="✅ Resolver",
             command=self._run_solver,
@@ -115,9 +160,15 @@ class AcademicPlannerApp:
             font=("Segoe UI", 10, "bold"),
             relief="flat", padx=12, pady=6,
             cursor="hand2",
-        ).pack(side="left", padx=4)
+        )
+        btn_resolver.pack(side="left", padx=4)
+        Tooltip(btn_resolver,
+                "Ejecuta el algoritmo UCS y calcula el plan de materias\n"
+                "más corto para graduarte desde tu situación actual.\n\n"
+                "Asegúrate de configurar el cuatrimestre y marcar\n"
+                "las materias que ya aprobaste antes de presionar.")
 
-        tk.Button(
+        btn_limpiar = tk.Button(
             btn_frame,
             text="🔄 Limpiar",
             command=self._clear,
@@ -125,9 +176,13 @@ class AcademicPlannerApp:
             font=("Segoe UI", 10),
             relief="flat", padx=10, pady=6,
             cursor="hand2",
-        ).pack(side="left", padx=4)
+        )
+        btn_limpiar.pack(side="left", padx=4)
+        Tooltip(btn_limpiar,
+                "Desmarca TODAS las materias y borra el resultado.\n"
+                "Úsalo para empezar la configuración desde cero.")
 
-        tk.Button(
+        btn_regular = tk.Button(
             btn_frame,
             text="👤 Regular",
             command=self._set_regular,
@@ -135,12 +190,39 @@ class AcademicPlannerApp:
             font=("Segoe UI", 10),
             relief="flat", padx=10, pady=6,
             cursor="hand2",
-        ).pack(side="left", padx=4)
+        )
+        btn_regular.pack(side="left", padx=4)
+        Tooltip(btn_regular,
+                "Marca automáticamente como aprobadas todas las materias\n"
+                "de los cuatrimestres ANTERIORES al que configuraste.\n\n"
+                "Ejemplo: si tienes cuatrimestre 4, marcará todo\n"
+                "lo de los cuatrimestres 1, 2 y 3.\n\n"
+                "Después puedes desmarcar manualmente cualquier\n"
+                "materia que hayas reprobado.")
+
+        # Sección de ayuda rápida
+        help_frame = tk.Frame(left, bg=SUBPANEL, bd=0)
+        help_frame.pack(fill="x", padx=10, pady=(0, 6))
+        tk.Label(
+            help_frame,
+            text=(
+                "💡 Cómo usar:\n"
+                "  1. Pon tu cuatrimestre actual en el selector ▲▼\n"
+                "  2. Marca las materias que ya aprobaste  ☑\n"
+                "     (o usa 👤 Regular si no reprobaste nada)\n"
+                "  3. Presiona ✅ Resolver"
+            ),
+            bg=SUBPANEL, fg="#b4befe",
+            font=("Segoe UI", 8),
+            justify="left",
+            padx=8, pady=6,
+            anchor="w",
+        ).pack(fill="x")
 
         # Lista de materias con scroll
         tk.Label(
             left,
-            text="📋 Materias aprobadas (marca las que ya cursó):",
+            text="📋 Materias aprobadas (marca las que ya cursaste):",
             bg=PANEL, fg=FG,
             font=("Segoe UI", 9),
             pady=4,
@@ -201,11 +283,36 @@ class AcademicPlannerApp:
 
         tk.Label(
             right,
-            text="📊 Plan de Recuperación Óptimo",
+            text="📊 Plan de Trayectoria Óptimo",
             bg=PANEL, fg=ACCENT,
             font=("Segoe UI", 11, "bold"),
             pady=8,
         ).pack(fill="x", padx=10)
+
+        # Leyenda de colores
+        legend_frame = tk.Frame(right, bg=SUBPANEL)
+        legend_frame.pack(fill="x", padx=10, pady=(0, 4))
+        tk.Label(
+            legend_frame,
+            text="Cómo leer el resultado:",
+            bg=SUBPANEL, fg="#b4befe",
+            font=("Segoe UI", 8, "bold"),
+            padx=6, pady=3,
+        ).pack(anchor="w")
+        leyendas = [
+            (ACCENT,   "Encabezado / estadísticas generales del plan"),
+            (WARNING,  "[CUATRIMESTRE N] — cada bloque es un periodo"),
+            (FG,       "• Materia — las que debes tomar ese cuatrimestre"),
+            (SUCCESS,  "🎉 Meta — ¡llegaste a Estancia II!"),
+            ("#b4befe", "Estadísticas UCS (nodos, tiempo de cómputo)"),
+        ]
+        for color, desc in leyendas:
+            row = tk.Frame(legend_frame, bg=SUBPANEL)
+            row.pack(anchor="w", padx=6, pady=1)
+            tk.Label(row, text="█", bg=SUBPANEL, fg=color,
+                     font=("Segoe UI", 9)).pack(side="left")
+            tk.Label(row, text=f" {desc}", bg=SUBPANEL, fg="#cdd6f4",
+                     font=("Segoe UI", 8)).pack(side="left")
 
         self.result_text = scrolledtext.ScrolledText(
             right,
@@ -216,6 +323,18 @@ class AcademicPlannerApp:
             insertbackground=FG,
         )
         self.result_text.pack(fill="both", expand=True, padx=10, pady=(0, 5))
+
+        # Mensaje de bienvenida en el área de resultados
+        self.result_text.insert(
+            tk.END,
+            "Aquí aparecerá tu plan de trayectoria académica.\n\n"
+            "  1️⃣  Configura tu cuatrimestre actual (panel izquierdo)\n"
+            "  2️⃣  Marca las materias que ya aprobaste  ☑\n"
+            "         (o usa 👤 Regular si eres alumno sin irregularidades)\n"
+            "  3️⃣  Presiona  ✅ Resolver\n\n"
+            "💡 Pasa el mouse sobre los botones para ver para qué sirven.\n",
+        )
+        self.result_text.config(state="disabled")  # solo lectura hasta que haya resultado
 
         # Etiquetas de color para el texto de resultados
         self.result_text.tag_config("header",  foreground=ACCENT,   font=("Consolas", 11, "bold"))
@@ -231,7 +350,13 @@ class AcademicPlannerApp:
         """Desmarca todas las materias y limpia el panel de resultados."""
         for v in self.vars_aprobadas.values():
             v.set(False)
+        self.result_text.config(state="normal")
         self.result_text.delete("1.0", tk.END)
+        self.result_text.insert(
+            tk.END,
+            "Panel limpiado. Configura el alumno y presiona ✅ Resolver.\n",
+        )
+        self.result_text.config(state="disabled")
         self.status_var.set("Limpiado. Configura el alumno y presiona Resolver.")
 
     def _set_regular(self):
@@ -248,6 +373,7 @@ class AcademicPlannerApp:
         aprobadas = {mid for mid, v in self.vars_aprobadas.items() if v.get()}
         cuatri = self.var_cuatri.get()
 
+        self.result_text.config(state="normal")
         self.result_text.delete("1.0", tk.END)
         self.result_text.insert(tk.END, "⏳ Ejecutando UCS…\n\n", "header")
         self.status_var.set("Ejecutando búsqueda UCS…")
@@ -268,6 +394,7 @@ class AcademicPlannerApp:
 
     def _show_result(self, resultado, cuatri_inicial: int):
         """Renderiza el plan óptimo (o el mensaje de error) en el panel derecho."""
+        self.result_text.config(state="normal")
         self.result_text.delete("1.0", tk.END)
 
         if resultado is None:
@@ -278,6 +405,7 @@ class AcademicPlannerApp:
                 "error",
             )
             self.status_var.set("Sin solución.")
+            self.result_text.config(state="disabled")
             return
 
         sep = "═" * 62 + "\n"
@@ -320,3 +448,4 @@ class AcademicPlannerApp:
             f"{resultado['cuatrimestres']} periodos | "
             f"{resultado['nodos_expandidos']} nodos expandidos"
         )
+        self.result_text.config(state="disabled")
