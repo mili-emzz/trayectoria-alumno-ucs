@@ -12,7 +12,7 @@ This project addresses the problem of planning academic trajectories for irregul
 
 En las instituciones de educación superior, un alumno adquiere el estatus de irregular cuando reprueba o deja de cursar asignaturas dentro de la secuencia sugerida por el mapa curricular[cite: 4]. El problema consiste en diseñar un plan de recuperación que permita al estudiante regularizar su situación en el menor tiempo posible (mínimo de cuatrimestres) sin exceder las restricciones institucionales[cite: 4].
 
-Específicamente, para la Universidad Politécnica, el planificador debe respetar el mapa de seriación de asignaturas, permitiendo transicionar únicamente hacia materias elegibles (aquellas cuyos prerrequisitos ya estén aprobados)[cite: 4]. Además, se debe respetar la regla que limita la carga académica a un máximo de 9 asignaturas por periodo lectivo, incluyendo un máximo de dos convalidaciones[cite: 4]. 
+Específicamente, para la Universidad Politécnica, el planificador debe respetar el mapa de seriación de asignaturas (ver Anexo A), permitiendo transicionar únicamente hacia materias elegibles (aquellas cuyos prerrequisitos ya estén aprobados)[cite: 4]. Además, se debe respetar la regla que limita la carga académica a un máximo de 9 asignaturas por periodo lectivo, incluyendo un máximo de dos convalidaciones[cite: 4]. 
 
 ## PEAS
 
@@ -41,7 +41,7 @@ El motor de transiciones del sistema, el cual actúa seleccionando e inscribiend
 
 ### Sensores
 
-La interfaz de usuario del sistema, compuesta por selectores (spinbox) para capturar el cuatrimestre actual del alumno y casillas de verificación (checkboxes) para identificar las materias que ya han sido aprobadas en su historial.
+La interfaz de usuario del sistema, compuesta por selectores (spinbox) para capturar el cuatrimestre actual del alumno y casillas de verificación (checkboxes) para identificar las materias que ya han sido aprobadas en su historial. El detalle completo de las instrucciones y botones de esta interfaz se encuentra en el Anexo B.
 
 ## Especificación del problema de búsqueda
 
@@ -255,13 +255,19 @@ Alumno Regular: Se evalúa un estudiante ideal que cursa su carrera de forma nor
 * **Estado inicial:** $S_0 = (\{Algoritmos, Algebra Lineal, ...\}, 4)$. El alumno se encuentra en 4to cuatrimestre y ha aprobado satisfactoriamente todas las asignaturas de los cuatrimestres 1, 2 y 3[cite: 2, 3].
 * **Meta:** Que el conjunto de asignaturas aprobadas equivalga a la totalidad del plan de estudios ($\text{IsGoal} = \text{True}$)[cite: 4].
 
-*(Inserta aquí la captura de pantalla de tu interfaz con el alumno regular configurado)*
+
+Como se observa en la siguiente captura, el estado inicial se configura estableciendo el cuatrimestre actual y marcando las materias aprobadas:
+![Estado inicial del alumno regular](images/caso1_estado_inicial.png)
 
 ### Solución
-*(Inserta aquí la captura de pantalla mostrando la trayectoria resultante para el alumno regular)*
+
+La trayectoria resultante generada por el algoritmo de búsqueda para este escenario se muestra a continuación:
+![Trayectoria resultante para el alumno regular - Parte 1](images/caso1_solucion.png)
+
 
 ### Ejecución
-*(Inserta aquí la secuencia de imágenes o capturas paso a paso de la resolución, si tu interfaz lo permite. Si no, inserta las capturas de la métrica de desempeño al finalizar).*
+Finalmente, las métricas de desempeño y el bloque de estadísticas al alcanzar la meta se aprecian en la siguiente captura:
+![Métricas de desempeño y fin de la trayectoria](images/caso1_ejecucion.png)
 
 ### Comentarios
 El algoritmo UCS retorna de manera instantánea la trayectoria estándar sugerida por la institución académica[cite: 3]. La función de costo $g(n)$ garantiza el egreso en el mínimo de cuatrimestres sin requerir recálculos complejos, comprobando el correcto funcionamiento base de la búsqueda y la seriación[cite: 4].
@@ -273,16 +279,20 @@ El algoritmo UCS retorna de manera instantánea la trayectoria estándar sugerid
 Cuello de Botella Crítico: Se simula un alumno que reprobó asignaturas fundamentales en los primeros periodos, las cuales abren largas cadenas de seriación consecutivas (por ejemplo, reprueba asignaturas de programación básica que bloquean Programación Orientada a Objetos y, subsecuentemente, Programación Web)[cite: 3].
 
 ### Estado inicial y meta
-* **Estado inicial:** $S_0 = (\{Materias_Aprobadas\}, 3)$. El alumno está en 3er periodo pero carece de asignaturas clave del 1er periodo.
+* **Estado inicial:** $S_0 = (\{Materias_Aprobadas\}, 3)$. El alumno está en 3er periodo pero carece de asignatura clave del 1er periodo.
 * **Meta:** Cursar todas las asignaturas minimizando el rezago provocado por la cadena bloqueada[cite: 4].
 
-*(Inserta aquí la captura de pantalla configurando el alumno irregular con las materias clave desmarcadas)*
+En la siguiente figura se detalla el estado inicial del alumno irregular con la materia clave desmarcada:
+![Estado inicial del alumno irregular con materia clave desmarcada](images/caso2_estado_inicial.png)
 
 ### Solución
-*(Inserta aquí la captura de la trayectoria resultante)*
+El plan de recuperación óptimo que prioriza destrabar la rama crítica se visualiza en la siguiente pantalla:
+![Trayectoria Resultante](images/caso2_solucion.png)
+
 
 ### Ejecución
-*(Inserta aquí la secuencia de imágenes de la ejecución)*
+A continuación se muestra el término de la ejecución del algoritmo junto con sus respectivas estadísticas de nodos:
+![Métricas de desempeño y fin de la trayectoria](images/caso2_ejecucion.png)
 
 ### Comentarios
 El generador de acciones, apoyado por su función interna `_criticidad()`, demuestra su efectividad[cite: 7]. El algoritmo identifica correctamente la "rama crítica" y fuerza al estudiante a cursar la asignatura bloqueada de forma prioritaria en el cuatrimestre más próximo, demostrando una planificación inteligente que prioriza destrabar el mapa curricular[cite: 3].
@@ -297,13 +307,16 @@ Carga Dispersa: Un estudiante que se ha rezagado debido a la reprobación de mú
 * **Estado inicial:** $S_0 = (\{Materias_Restantes\}, 5)$. El estudiante está en 5to cuatrimestre, con un expediente fragmentado.
 * **Meta:** Nivelar al estudiante combinando eficientemente asignaturas atrasadas con materias de su cuatrimestre actual[cite: 3, 4].
 
-*(Inserta aquí la captura de pantalla con múltiples materias desmarcadas al azar)*
+El estado inicial con múltiples materias aisladas pendientes de cursar se configura tal como se ilustra a continuación:
+![Estado inicial del alumno irregular con múltiples materias reprobadas](images/caso3_estado_inicial.png)
 
 ### Solución
-*(Inserta aquí la captura de la trayectoria resultante)*
+La solución generada por el sistema, agrupando eficientemente las asignaturas, se presenta en la siguiente captura:
+![Trayectoria Resultante](images/caso3_solucion.png)
 
 ### Ejecución
-*(Inserta aquí la secuencia de imágenes de la ejecución)*
+Para concluir, las métricas finales de la ejecución de este escenario se muestran a continuación:
+![Métricas de desempeño y fin de la trayectoria](images/caso3_ejecucion.png)
 
 ### Comentarios
 El sistema agrupó exitosamente la carga académica utilizando el límite máximo permitido ($\le 9$ materias)[cite: 3, 4]. El desempate de la función de costo ($EPSILON$) garantizó que, al llegar al estado meta, el UCS escogiera la combinación que requería menos cuatrimestres sin saturar al estudiante con materias de relleno innecesarias[cite: 4, 7].
@@ -320,4 +333,8 @@ La implementación de la Búsqueda de Costo Uniforme (UCS) para el modelado de t
 *   **Flexibilidad de Restricciones:** Añadir selectores en la interfaz visual que permitan modificar en tiempo de ejecución las reglas de la universidad (ej. bajar la restricción máxima a 7 materias en lugar de 9 para perfiles específicos).
 
 # Anexos
-*(Si es necesario, colocar aquí diagramas adicionales del árbol de búsqueda, el manual de uso del planificador o referencias técnicas del entorno de desarrollo utilizado).*
+## Anexo A - Mapa de Seriación Curricular
+![Anexo A - Ingeniería en Software Seriacion](../IS%20Seriación%20v2024.06.20_page-0001.jpg)
+
+## Anexo B - Manual de Uso del Sistema
+El manual de usuario completo, que detalla el paso a paso de la configuración de cuatrimestres, el uso de los botones (Resolver, Limpiar, Regular) y los casos de uso típicos de la interfaz, se encuentra disponible y documentado para su consulta en el archivo [Manual de Uso](../manual_de_uso.md) ubicado en la carpeta del proyecto.
