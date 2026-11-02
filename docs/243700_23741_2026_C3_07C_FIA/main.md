@@ -257,12 +257,12 @@ Alumno Regular: Se evalúa un estudiante ideal que cursa su carrera de forma nor
 
 
 Como se observa en la siguiente captura, el estado inicial se configura estableciendo el cuatrimestre actual y marcando las materias aprobadas:
-![Estado inicial del alumno regular](images/caso1_estado_inicial.png)
+![Estado inicial del alumno regular](../images/caso1_estado_inicial.png)
 
 ### Solución
 
 La trayectoria resultante generada por el algoritmo de búsqueda para este escenario se muestra a continuación:
-![Trayectoria resultante para el alumno regular - Parte 1](images/caso1_solucion.png)
+![Trayectoria resultante para el alumno regular - Parte 1](../243700_23741_2026_C3_07C_FIA/images/caso1_solucion.png)
 
 
 ### Ejecución
