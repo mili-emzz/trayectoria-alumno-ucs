@@ -241,6 +241,7 @@ def costo_paso(accion: frozenset) -> float:
     Un float con el costo numérico (ej. 1.05 si se inscriben 5 materias).
     """
     return 1.0 + len(accion) * EPSILON
+```
 
 # Resultados
 
