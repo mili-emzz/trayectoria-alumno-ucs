@@ -8,18 +8,20 @@ from tkinter import ttk, scrolledtext, messagebox
 import threading
 
 from src.curriculum import MATERIAS, TODAS_LAS_MATERIAS
-from src.solver import ucs
+from src.solver import ucs, EST_TSU, EST_PROF, BLOQUE_ING
 
 
 # ── Clase utilitaria para Tooltips ──────────────────────────────────────────
 
 def validar_aprobadas(aprobadas: set, cuatrimestre: int) -> list:
     """
-    Valida las materias marcadas como aprobadas contra el cuatrimestre actual.
+    Valida las materias marcadas como aprobadas.
 
-    Un alumno que está por cursar el cuatrimestre N solo pudo haber aprobado
-    materias de los cuatrimestres 1 a N-1: una materia de nivel N o superior
-    todavía no ha podido cursarse.
+      1. Cuatrimestre: un alumno que está por cursar el cuatrimestre N solo pudo
+         haber aprobado materias de los cuatrimestres 1 a N-1.
+      2. Seriación: toda materia aprobada debe tener aprobados todos sus
+         prerrequisitos. Además, las materias de Q7-Q9 y la Estadía profesional
+         requieren la Estadía TSU aprobada (regla de las dos metas del solver).
 
     Devuelve una lista de mensajes de error (vacía si todo es válido).
     """
@@ -43,6 +45,35 @@ def validar_aprobadas(aprobadas: set, cuatrimestre: int) -> list:
             "Marcaste como aprobadas materias que todavía no corresponden:\n"
             f"{detalle}\n\n{regla}\n"
             "Desmárcalas o cambia el cuatrimestre actual."
+        )
+
+    # ── Seriación: cada materia aprobada necesita sus prerrequisitos aprobados ──
+    problemas = []
+    for m in sorted(aprobadas, key=lambda x: (MATERIAS[x]["cuatrimestre"], MATERIAS[x]["nombre"])):
+        faltantes = [p for p in MATERIAS[m]["prereqs"] if p not in aprobadas]
+        # Regla de las dos metas: Q7-Q9 y la Estadía profesional requieren la Estadía TSU
+        if (m in BLOQUE_ING or m == EST_PROF) and EST_TSU not in aprobadas \
+                and EST_TSU not in faltantes:
+            faltantes.append(EST_TSU)
+        if faltantes:
+            faltantes.sort(key=lambda x: (MATERIAS[x]["cuatrimestre"], MATERIAS[x]["nombre"]))
+            nombres = [MATERIAS[p]["nombre"] for p in faltantes]
+            if len(nombres) > 5:
+                lista = ", ".join(nombres[:5]) + f" y {len(nombres) - 5} más"
+            else:
+                lista = ", ".join(nombres)
+            problemas.append(f"   • {MATERIAS[m]['nombre']} → falta aprobar: {lista}")
+
+    if problemas:
+        maximo = 8
+        if len(problemas) > maximo:
+            resto = len(problemas) - maximo
+            problemas = problemas[:maximo] + [f"   … y {resto} materia(s) más con el mismo problema"]
+        errores.append(
+            "Marcaste como aprobadas materias sin haber aprobado sus prerrequisitos:\n"
+            + "\n".join(problemas)
+            + "\n\nPara aprobar una materia seriada hay que haber aprobado antes sus "
+              "prerrequisitos. Marca los que faltan o desmarca la materia."
         )
 
     return errores
