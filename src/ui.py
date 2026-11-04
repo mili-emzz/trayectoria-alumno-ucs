@@ -13,6 +13,41 @@ from src.solver import ucs
 
 # ── Clase utilitaria para Tooltips ──────────────────────────────────────────
 
+def validar_aprobadas(aprobadas: set, cuatrimestre: int) -> list:
+    """
+    Valida las materias marcadas como aprobadas contra el cuatrimestre actual.
+
+    Un alumno que está por cursar el cuatrimestre N solo pudo haber aprobado
+    materias de los cuatrimestres 1 a N-1: una materia de nivel N o superior
+    todavía no ha podido cursarse.
+
+    Devuelve una lista de mensajes de error (vacía si todo es válido).
+    """
+    errores = []
+
+    futuras = sorted(
+        (m for m in aprobadas if MATERIAS[m]["cuatrimestre"] >= cuatrimestre),
+        key=lambda m: (MATERIAS[m]["cuatrimestre"], MATERIAS[m]["nombre"]),
+    )
+    if futuras:
+        detalle = "\n".join(
+            f"   • {MATERIAS[m]['nombre']} (cuatrimestre {MATERIAS[m]['cuatrimestre']})"
+            for m in futuras
+        )
+        if cuatrimestre == 1:
+            regla = "En el cuatrimestre 1 el alumno aún no puede tener materias aprobadas."
+        else:
+            regla = (f"Un alumno en el cuatrimestre {cuatrimestre} solo puede tener "
+                     f"aprobadas materias de los cuatrimestres 1 a {cuatrimestre - 1}.")
+        errores.append(
+            "Marcaste como aprobadas materias que todavía no corresponden:\n"
+            f"{detalle}\n\n{regla}\n"
+            "Desmárcalas o cambia el cuatrimestre actual."
+        )
+
+    return errores
+
+
 class Tooltip:
     """Muestra una ventana emergente con texto de ayuda al pasar el mouse."""
 
@@ -372,6 +407,13 @@ class AcademicPlannerApp:
         """Lanza el UCS en un hilo secundario para no bloquear la UI."""
         aprobadas = {mid for mid, v in self.vars_aprobadas.items() if v.get()}
         cuatri = self.var_cuatri.get()
+
+        # Validar los datos de entrada antes de lanzar la búsqueda
+        errores = validar_aprobadas(aprobadas, cuatri)
+        if errores:
+            self.status_var.set("Datos inválidos: corrige las materias aprobadas.")
+            messagebox.showerror("Materias aprobadas inválidas", "\n\n".join(errores))
+            return
 
         self.result_text.config(state="normal")
         self.result_text.delete("1.0", tk.END)
