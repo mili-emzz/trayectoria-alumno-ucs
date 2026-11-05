@@ -1,1 +1,0 @@
-# trayectoria-alumno-ucs
