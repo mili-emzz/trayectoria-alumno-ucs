@@ -17,7 +17,7 @@ Este proyecto modela el mapa curricular como un problema de búsqueda de Intelig
 
 ## 🚀 Características Principales
 
-- 🧠 **Algoritmo de IA:** Implementación de Búsqueda de Costo Uniforme (UCS) que garantiza la ruta óptima en número de periodos y costo acumulado.
+- 🧠 **Algoritmo:** Implementación de Búsqueda de Costo Uniforme (UCS) que garantiza la ruta óptima en número de periodos y costo acumulado.
 - 💻 **Interfaz Gráfica (GUI):** Desarrollada en Tkinter, amigable e intuitiva para marcar materias cursadas, seleccionar el cuatrimestre de avance y visualizar el plan sugerido periodo a periodo.
 - ⚙️ **Modos Rápidos:** Botón para cargar automáticamente el perfil de alumno regular según el cuatrimestre seleccionado.
 - 📊 **Métricas y Resultados:** Muestra la secuencia detallada de inscripción, cuatrimestres necesarios y métricas del algoritmo (nodos explorados, tiempo de cómputo).
