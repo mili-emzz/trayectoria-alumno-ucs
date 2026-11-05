@@ -4,7 +4,7 @@ Planificador de Trayectoria Académica — Ingeniería en Software
 """
 
 import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox
+from tkinter import ttk, scrolledtext, messagebox, filedialog
 import threading
 
 from src.curriculum import MATERIAS, TODAS_LAS_MATERIAS
@@ -77,6 +77,95 @@ def validar_aprobadas(aprobadas: set, cuatrimestre: int) -> list:
         )
 
     return errores
+
+
+def construir_tabla(plan: list) -> tuple:
+    """
+    Convierte el plan del solver en una tabla: una COLUMNA por cuatrimestre y una
+    FILA por materia a cursar.
+
+    Devuelve (encabezados, filas, cargas):
+      - encabezados: ["Cuatrimestre 4", "Cuatrimestre 5", ...]
+      - filas      : lista de filas; cada celda es el ID de la materia o None si
+                     esa columna ya no tiene más materias.
+      - cargas     : número de materias de cada cuatrimestre.
+    Las materias de cada columna se ordenan por nivel original y nombre.
+    """
+    encabezados = [f"Cuatrimestre {p['cuatrimestre']}" for p in plan]
+    columnas = [
+        sorted(p["materias"], key=lambda m: (MATERIAS[m]["cuatrimestre"], MATERIAS[m]["nombre"]))
+        for p in plan
+    ]
+    cargas = [len(c) for c in columnas]
+    n_filas = max(cargas, default=0)
+    filas = [[col[i] if i < len(col) else None for col in columnas] for i in range(n_filas)]
+    return encabezados, filas, cargas
+
+
+def exportar_plan_excel(plan: list, ruta: str) -> None:
+    """
+    Exporta la tabla del plan a un archivo Excel (.xlsx) usando openpyxl.
+    Misma estructura que la tabla de la interfaz: una columna por cuatrimestre,
+    una fila por materia y, al final, una fila con la carga de cada cuatrimestre.
+    Lanza ImportError si openpyxl no está instalado y OSError si no se puede guardar.
+    """
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.properties import PageSetupProperties
+
+    encabezados, filas, cargas = construir_tabla(plan)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Plan de trayectoria"
+
+    lado = Side(style="thin", color="999999")
+    borde = Border(left=lado, right=lado, top=lado, bottom=lado)
+    centrado = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    izquierda = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+    # Encabezados (una columna por cuatrimestre)
+    for c, texto in enumerate(encabezados, start=1):
+        celda = ws.cell(row=1, column=c, value=texto)
+        celda.font = Font(bold=True, color="FFFFFF")
+        celda.fill = PatternFill("solid", fgColor="1F4E78")
+        celda.alignment = centrado
+        celda.border = borde
+
+    # Materias (una fila por materia); las estadías se resaltan
+    for r, fila in enumerate(filas, start=2):
+        for c, mid in enumerate(fila, start=1):
+            celda = ws.cell(row=r, column=c, value=MATERIAS[mid]["nombre"] if mid else None)
+            celda.alignment = izquierda
+            celda.border = borde
+            if mid in (EST_TSU, EST_PROF):
+                celda.font = Font(bold=True)
+                celda.fill = PatternFill("solid", fgColor="F8D7DA")
+
+    # Carga de cada cuatrimestre
+    fila_carga = len(filas) + 2
+    for c, n in enumerate(cargas, start=1):
+        celda = ws.cell(row=fila_carga, column=c, value=f"Carga: {n} materia{'s' if n != 1 else ''}")
+        celda.font = Font(bold=True)
+        celda.fill = PatternFill("solid", fgColor="D9D9D9")
+        celda.alignment = centrado
+        celda.border = borde
+
+    # Ancho de columna según el nombre más largo (con tope) y encabezado fijo
+    for c in range(1, len(encabezados) + 1):
+        nombres = [MATERIAS[f[c - 1]]["nombre"] for f in filas if f[c - 1]]
+        ancho = min(max([len(n) for n in nombres] + [16]), 34) + 2
+        ws.column_dimensions[get_column_letter(c)].width = ancho
+    ws.freeze_panes = "A2"
+
+    # Al imprimir: hoja horizontal con todas las columnas en una sola página de ancho
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
+
+    wb.save(ruta)
 
 
 class Tooltip:
@@ -367,9 +456,9 @@ class AcademicPlannerApp:
         ).pack(anchor="w")
         leyendas = [
             (ACCENT,   "Encabezado / estadísticas generales del plan"),
-            (WARNING,  "[CUATRIMESTRE N] — cada bloque es un periodo"),
-            (FG,       "• Materia — las que debes tomar ese cuatrimestre"),
-            (SUCCESS,  "🎉 Meta — ¡llegaste a Estancia II!"),
+            (WARNING,  "Columna — cada cuatrimestre del plan (encabezado)"),
+            (FG,       "Fila — las materias que debes tomar ese cuatrimestre"),
+            (SUCCESS,  "Estadías (se cursan solas) · 🎉 Meta: Estadía IT2iD"),
             ("#b4befe", "Estadísticas UCS (nodos, tiempo de cómputo)"),
         ]
         for color, desc in leyendas:
@@ -410,12 +499,161 @@ class AcademicPlannerApp:
         self.result_text.tag_config("stats",   foreground="#b4befe")
         self.result_text.tag_config("error",   foreground=ERROR)
 
+        # ── Tabla del plan: columnas = cuatrimestres, filas = materias ──────
+        self.table_frame = tk.Frame(right, bg=PANEL)
+        self.table_canvas = tk.Canvas(self.table_frame, bg="#11111b",
+                                      highlightthickness=0, height=200)
+        vbar = ttk.Scrollbar(self.table_frame, orient="vertical", command=self.table_canvas.yview)
+        hbar = ttk.Scrollbar(self.table_frame, orient="horizontal", command=self.table_canvas.xview)
+        self.table_canvas.configure(yscrollcommand=vbar.set, xscrollcommand=hbar.set)
+        self.table_inner = tk.Frame(self.table_canvas, bg="#11111b")
+        self.table_canvas.create_window((0, 0), window=self.table_inner, anchor="nw")
+        self.table_inner.bind(
+            "<Configure>",
+            lambda e: self.table_canvas.configure(scrollregion=self.table_canvas.bbox("all")),
+        )
+        hbar.pack(side="bottom", fill="x")
+        vbar.pack(side="right", fill="y")
+        self.table_canvas.pack(side="left", fill="both", expand=True)
+        self._bind_scroll_tabla(self.table_canvas)
+
+        # Barra con el botón de exportación
+        self.export_bar = tk.Frame(right, bg=PANEL)
+        self.btn_exportar = tk.Button(
+            self.export_bar,
+            text="📥 Exportar a Excel",
+            command=self._exportar_excel,
+            bg=SUCCESS, fg="#1e1e2e",
+            font=("Segoe UI", 9, "bold"),
+            relief="flat", padx=10, pady=3,
+            cursor="hand2",
+            state="disabled",
+        )
+        self.btn_exportar.pack(side="right")
+        Tooltip(self.btn_exportar,
+                "Guarda la tabla del plan como archivo Excel (.xlsx):\n"
+                "una columna por cuatrimestre y una fila por materia.")
+        tk.Label(
+            self.export_bar,
+            text="Cada columna es un cuatrimestre y cada fila una materia a cursar",
+            bg=PANEL, fg=FG, font=("Segoe UI", 8),
+        ).pack(side="left")
+
+        self._ultimo_plan = None   # plan mostrado actualmente (para exportar)
+
+    # ── Modos del área de resultados: texto (mensajes) o tabla (plan) ────────
+
+    def _modo_texto(self):
+        """Área de resultados en modo mensaje: el texto ocupa todo el espacio."""
+        self._ultimo_plan = None
+        self.btn_exportar.config(state="disabled")
+        self.export_bar.pack_forget()
+        self.table_frame.pack_forget()
+        self.result_text.pack_forget()
+        self.result_text.config(height=24)
+        self.result_text.pack(fill="both", expand=True, padx=10, pady=(0, 5))
+
+    def _modo_tabla(self):
+        """Área de resultados en modo plan: tabla arriba y resumen del texto abajo."""
+        self.export_bar.pack_forget()
+        self.table_frame.pack_forget()
+        self.result_text.pack_forget()
+        self.export_bar.pack(fill="x", padx=10, pady=(0, 4))
+        self.table_frame.pack(fill="both", expand=True, padx=10, pady=(0, 4))
+        self.result_text.config(height=6)
+        self.result_text.pack(fill="x", padx=10, pady=(0, 5))
+
+    def _bind_scroll_tabla(self, widget):
+        """La rueda del mouse desplaza la tabla (Shift = horizontal) sin mover la lista izquierda."""
+        widget.bind("<MouseWheel>", self._scroll_tabla)
+        widget.bind("<Shift-MouseWheel>", self._scroll_tabla)
+        widget.bind("<Button-4>", self._scroll_tabla)   # Linux
+        widget.bind("<Button-5>", self._scroll_tabla)
+
+    def _scroll_tabla(self, event):
+        subir = getattr(event, "num", 0) == 4 or getattr(event, "delta", 0) > 0
+        paso = -1 if subir else 1
+        if event.state & 0x1:   # Shift pulsado
+            self.table_canvas.xview_scroll(paso, "units")
+        else:
+            self.table_canvas.yview_scroll(paso, "units")
+        return "break"          # evita que también se mueva la lista de materias
+
+    def _render_tabla(self, plan: list):
+        """Dibuja la tabla del plan en el área de resultados."""
+        for w in self.table_inner.winfo_children():
+            w.destroy()
+
+        encabezados, filas, cargas = construir_tabla(plan)
+        ancho = 190   # píxeles por columna
+
+        def celda(fila, col, texto, bg, fg, negrita=False):
+            lbl = tk.Label(
+                self.table_inner, text=texto, bg=bg, fg=fg,
+                font=("Segoe UI", 9, "bold" if negrita else "normal"),
+                wraplength=ancho - 16, justify="left", anchor="w",
+                padx=7, pady=5, bd=0,
+            )
+            lbl.grid(row=fila, column=col, sticky="nsew", padx=1, pady=1)
+            self._bind_scroll_tabla(lbl)
+
+        for c, titulo in enumerate(encabezados):
+            self.table_inner.grid_columnconfigure(c, minsize=ancho)
+            celda(0, c, titulo, SUBPANEL, WARNING, negrita=True)
+
+        for r, fila in enumerate(filas, start=1):
+            for c, mid in enumerate(fila):
+                if mid is None:
+                    celda(r, c, "", PANEL, FG)
+                elif mid in (EST_TSU, EST_PROF):
+                    celda(r, c, MATERIAS[mid]["nombre"], PANEL, SUCCESS, negrita=True)
+                else:
+                    celda(r, c, MATERIAS[mid]["nombre"], PANEL, FG)
+
+        for c, n in enumerate(cargas):
+            celda(len(filas) + 1, c, f"Carga: {n} materia{'s' if n != 1 else ''}",
+                  SUBPANEL, "#b4befe", negrita=True)
+
+        self.table_canvas.xview_moveto(0)
+        self.table_canvas.yview_moveto(0)
+
+    def _exportar_excel(self):
+        """Pide la ruta de guardado y exporta la tabla del plan a un .xlsx."""
+        if not self._ultimo_plan:
+            messagebox.showinfo("Exportar a Excel", "Primero calcula un plan con ✅ Resolver.")
+            return
+        ruta = filedialog.asksaveasfilename(
+            title="Guardar plan como Excel",
+            defaultextension=".xlsx",
+            filetypes=[("Libro de Excel", "*.xlsx")],
+            initialfile="plan_trayectoria.xlsx",
+        )
+        if not ruta:   # el usuario canceló
+            return
+        try:
+            exportar_plan_excel(self._ultimo_plan, ruta)
+        except ImportError:
+            messagebox.showerror(
+                "Falta la librería openpyxl",
+                "Para exportar a Excel instala openpyxl:\n\n    pip install openpyxl",
+            )
+            return
+        except OSError as e:   # archivo abierto en Excel, ruta sin permisos, etc.
+            messagebox.showerror(
+                "No se pudo guardar el archivo",
+                f"{e}\n\nSi el archivo está abierto en Excel, ciérralo e inténtalo de nuevo.",
+            )
+            return
+        self.status_var.set(f"📥 Plan exportado a: {ruta}")
+        messagebox.showinfo("Exportación completa", f"El plan se guardó en:\n{ruta}")
+
     # ── Lógica de los botones ────────────────────────────────────────────────
 
     def _clear(self):
         """Desmarca todas las materias y limpia el panel de resultados."""
         for v in self.vars_aprobadas.values():
             v.set(False)
+        self._modo_texto()
         self.result_text.config(state="normal")
         self.result_text.delete("1.0", tk.END)
         self.result_text.insert(
@@ -446,6 +684,7 @@ class AcademicPlannerApp:
             messagebox.showerror("Materias aprobadas inválidas", "\n\n".join(errores))
             return
 
+        self._modo_texto()
         self.result_text.config(state="normal")
         self.result_text.delete("1.0", tk.END)
         self.result_text.insert(tk.END, "⏳ Ejecutando UCS…\n\n", "header")
@@ -471,6 +710,7 @@ class AcademicPlannerApp:
         self.result_text.delete("1.0", tk.END)
 
         if resultado is None:
+            self._modo_texto()
             self.result_text.insert(tk.END, "❌ No se encontró solución.\n", "error")
             self.result_text.insert(
                 tk.END,
@@ -478,6 +718,14 @@ class AcademicPlannerApp:
                 "error",
             )
             self.status_var.set("Sin solución.")
+            self.result_text.config(state="disabled")
+            return
+
+        if not resultado["plan"]:
+            self._modo_texto()
+            self.result_text.insert(
+                tk.END, "🎓 El alumno ya aprobó todas las materias: no hay nada que cursar.\n", "goal")
+            self.status_var.set("El alumno ya aprobó todas las materias.")
             self.result_text.config(state="disabled")
             return
 
@@ -491,18 +739,11 @@ class AcademicPlannerApp:
         self.result_text.insert(tk.END, f"  Costo total acumulado    : {resultado['costo_total']}\n", "stats")
         self.result_text.insert(tk.END, f"  Periodos hasta graduación: {resultado['cuatrimestres']}\n\n", "stats")
 
-        # Plan cuatrimestre a cuatrimestre
-        for paso in resultado["plan"]:
-            carga = len(paso["materias"])
-            self.result_text.insert(
-                tk.END,
-                f"[CUATRIMESTRE {paso['cuatrimestre']}]  "
-                f"(Carga: {carga} materia{'s' if carga != 1 else ''})\n",
-                "quarter",
-            )
-            for nombre in paso["nombres"]:
-                self.result_text.insert(tk.END, f"   • {nombre}\n", "subject")
-            self.result_text.insert(tk.END, "\n")
+        # Plan cuatrimestre a cuatrimestre: tabla (columnas = cuatrimestres, filas = materias)
+        self._modo_tabla()
+        self._render_tabla(resultado["plan"])
+        self._ultimo_plan = resultado["plan"]
+        self.btn_exportar.config(state="normal")
 
         # Meta alcanzada
         self.result_text.insert(tk.END, "🎉 ¡ESTADO META ALCANZADO — GRADUACIÓN! 🎉\n\n", "goal")
